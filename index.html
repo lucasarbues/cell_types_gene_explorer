@@ -1,0 +1,394 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Atlas gene explorer</title>
+<meta name="description" content="Expresión de un gen por tipo celular y estadío en el atlas de desarrollo de cerebro de ratón.">
+<style>
+  :root {
+    --bg: #f7f7f5;
+    --card: #ffffff;
+    --text: #1d1d1f;
+    --muted: #6b6b70;
+    --border: #e3e3e0;
+    --track: #efefec;
+    --pct: #2a7ab0;
+    --mean: #e08a2c;
+    --accent: #2a7ab0;
+    --hover: #f0f5fa;
+    --warn-bg: #fff4e0;
+    --warn-border: #f0c987;
+    --warn-text: #7a4a00;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #121214;
+      --card: #1c1c1f;
+      --text: #ececee;
+      --muted: #9a9aa2;
+      --border: #2e2e33;
+      --track: #2a2a2e;
+      --pct: #5aa6dc;
+      --mean: #f0a24e;
+      --accent: #5aa6dc;
+      --hover: #24303a;
+      --warn-bg: #3a2c14;
+      --warn-border: #6b5020;
+      --warn-text: #f3cf8f;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #121214;
+    --card: #1c1c1f;
+    --text: #ececee;
+    --muted: #9a9aa2;
+    --border: #2e2e33;
+    --track: #2a2a2e;
+    --pct: #5aa6dc;
+    --mean: #f0a24e;
+    --accent: #5aa6dc;
+    --hover: #24303a;
+    --warn-bg: #3a2c14;
+    --warn-border: #6b5020;
+    --warn-text: #f3cf8f;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 15px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 640px; margin: 0 auto; padding: 16px 16px 48px; }
+  h1 { font-size: 1.25rem; margin: 4px 0 2px; }
+  .sub { color: var(--muted); font-size: .85rem; margin: 0 0 10px; }
+  .warn {
+    background: var(--warn-bg); border: 1px solid var(--warn-border); color: var(--warn-text);
+    border-radius: 10px; padding: 10px 12px; font-size: .85rem; margin: 0 0 12px;
+  }
+
+  .search { position: sticky; top: 0; z-index: 10; background: var(--bg); padding: 8px 0 10px; }
+  .search input {
+    width: 100%; padding: 12px 14px; font-size: 16px;   /* 16px avoids iOS zoom on focus */
+    border: 1px solid var(--border); border-radius: 10px;
+    background: var(--card); color: var(--text); outline: none;
+  }
+  .search input:focus { border-color: var(--accent); }
+  #suggest {
+    list-style: none; margin: 4px 0 0; padding: 0; position: absolute; left: 0; right: 0;
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    overflow: hidden; box-shadow: 0 6px 18px rgba(0,0,0,.12);
+  }
+  #suggest:empty { display: none; }
+  #suggest li { padding: 10px 14px; cursor: pointer; border-top: 1px solid var(--border); }
+  #suggest li:first-child { border-top: 0; }
+  #suggest li.active, #suggest li:hover { background: var(--hover); }
+  #suggest b { color: var(--accent); }
+
+  #status { color: var(--muted); font-size: .9rem; margin: 10px 2px; }
+  .gene-title { font-size: 1.6rem; font-style: italic; font-weight: 700; margin: 6px 0 4px; }
+
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: .8rem; color: var(--muted); margin: 0 0 12px; }
+  .legend span::before {
+    content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 2px;
+    margin-right: 6px; vertical-align: -1px; background: var(--c);
+  }
+
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px; margin-bottom: 14px; }
+  .card-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .card h2 { font-size: 1rem; margin: 0; }
+  .toggle { display: flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; flex-shrink: 0; }
+  .toggle button {
+    border: 0; background: transparent; color: var(--muted); padding: 5px 10px;
+    font-size: .78rem; cursor: pointer;
+  }
+  .toggle button.on { background: var(--accent); color: #fff; }
+
+  .row { padding: 7px 0; border-top: 1px solid var(--border); }
+  .row:first-child { border-top: 0; }
+  .lbl { display: flex; justify-content: space-between; gap: 8px; font-size: .9rem; margin-bottom: 4px; }
+  .lbl .n { color: var(--muted); font-size: .75rem; white-space: nowrap; }
+  .bar { display: flex; align-items: center; gap: 8px; }
+  .bar + .bar { margin-top: 3px; }
+  .track { flex: 1; background: var(--track); border-radius: 4px; overflow: hidden; }
+  .track i { display: block; height: 100%; border-radius: 4px; }
+  .bar.pct .track { height: 12px; }
+  .bar.pct i { background: var(--pct); }
+  .bar.mean .track { height: 6px; }
+  .bar.mean i { background: var(--mean); }
+  .val { width: 48px; text-align: right; font-size: .78rem; font-variant-numeric: tabular-nums; color: var(--muted); }
+  .bar.pct .val { color: var(--text); }
+
+  .more {
+    width: 100%; margin-top: 8px; padding: 8px; border: 1px solid var(--border); border-radius: 8px;
+    background: transparent; color: var(--accent); font-size: .85rem; cursor: pointer;
+  }
+  details { color: var(--muted); font-size: .82rem; margin-top: 18px; }
+  details summary { cursor: pointer; }
+  details p { margin: 6px 0; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Atlas gene explorer</h1>
+  <p class="sub">Desarrollo de cerebro de ratón, E11.5 – E17.5</p>
+  <p class="warn"><b>Datos preliminares.</b> La anotación de tipos celulares es automática y
+     todavía puede cambiar; no usar estos resultados como definitivos.</p>
+
+  <div class="search">
+    <div style="position:relative;">
+      <input id="q" type="search" placeholder="Buscar un gen, ej. Sox2" autocomplete="off"
+             autocapitalize="off" autocorrect="off" spellcheck="false" disabled>
+      <ul id="suggest"></ul>
+    </div>
+  </div>
+
+  <div id="status">Cargando lista de genes…</div>
+  <div id="result"></div>
+
+  <details>
+    <summary>¿Qué muestran los gráficos?</summary>
+    <p><b>% de células</b>: porcentaje de células del grupo en las que el gen se detecta
+       (expresión log-normalizada ≥ <span id="thr">0.1</span>).</p>
+    <p><b>Expresión media</b>: promedio de la expresión log-normalizada en todas las células del grupo.
+       La barra es relativa al grupo con mayor valor para ese gen.</p>
+    <p>Los tipos celulares son la anotación automática por cluster (v5) de este proyecto,
+       agregando células de todos los estadíos. Es preliminar y puede cambiar.</p>
+  </details>
+</main>
+
+<script>
+(function () {
+  var META = null;
+  var GENES_LC = [];          // lowercase gene names, aligned with META.genes
+  var BY_LC = {};             // lowercase -> canonical gene name
+  var SHARDS = {};            // shard key -> Promise of parsed shard
+  var TOP_N = 10;
+
+  // AutoAnnotation v5 code (as in meta.json) -> name shown on this page
+  var NAMES = {
+    Vasc2: "Células murales",
+    Vasc1: "Células endoteliales",
+    RBC2: "Eritrocitos",
+    RBC1: "Eritrocitos embrionarios",
+    Prog3: "Precursores cerebelares",
+    Prog2: "Progenitores Intermedios",
+    Prog1: "Glía radial",
+    Olig: "Oligodendrocitos",
+    Nbl3: "Neuronas en migración",
+    Nbl2: "Neuronas inhibitorias nuevas",
+    Nbl1: "Neuronas postmitóticas nuevas",
+    Mgl: "Microglia",
+    Fib: "Fibroblastos",
+    InN2: "Neuronas inhibitorias (Glicina)",
+    InN1: "Neuronas inhibitorias (GABA)",
+    Gbl2: "Precursores oligodendrogliales",
+    Gbl1: "Precursores gliales (astrocitos)",
+    ExN2: "Neuronas glut. no corticales",
+    ExN1: "Neuronas de proyección corticales",
+    Epd: "Ependimocitos",
+    Ast2: "Glía de Bergmann (cerebelo)",
+    Ast1: "Astrocitos",
+    Unassigned: "Sin asignar"
+  };
+
+  var q = document.getElementById("q");
+  var suggest = document.getElementById("suggest");
+  var status = document.getElementById("status");
+  var result = document.getElementById("result");
+  var activeIdx = -1;
+
+  // Must match shard_key() in generate_gene_data.Rmd
+  function shardKey(g) {
+    var k = g.slice(0, 3).toLowerCase().replace(/[^a-z0-9]/g, "_");
+    return /^(con|prn|aux|nul)$/.test(k) ? k + "_" : k;   // reserved Windows file names
+  }
+
+  function esc(s) {
+    return String(s).replace(/[&<>"]/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
+    });
+  }
+
+  function fmtN(n) { return n.toLocaleString("es-AR"); }
+
+  function loadShard(key) {
+    if (!SHARDS[key]) {
+      SHARDS[key] = fetch("data/shards/" + key + ".json").then(function (r) {
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        return r.json();
+      });
+      SHARDS[key].catch(function () { delete SHARDS[key]; });
+    }
+    return SHARDS[key];
+  }
+
+  // ---- suggestions ----
+  function findMatches(text, max) {
+    var t = text.trim().toLowerCase();
+    if (!t) return [];
+    var prefix = [], inner = [];
+    for (var i = 0; i < GENES_LC.length; i++) {
+      var g = GENES_LC[i];
+      if (g.indexOf(t) === 0) prefix.push(i);
+      else if (inner.length < max && g.indexOf(t) > 0) inner.push(i);
+    }
+    // shorter names first (exact match, then Sox2 before Sox21), alphabetical within a length
+    prefix.sort(function (a, b) { return GENES_LC[a].length - GENES_LC[b].length || a - b; });
+    return prefix.concat(inner).slice(0, max).map(function (i) { return META.genes[i]; });
+  }
+
+  function renderSuggest() {
+    var text = q.value.trim();
+    var matches = findMatches(text, 8);
+    activeIdx = -1;
+    var t = text.toLowerCase();
+    suggest.innerHTML = matches.map(function (g, i) {
+      var k = g.toLowerCase().indexOf(t);
+      var html = esc(g.slice(0, k)) + "<b>" + esc(g.slice(k, k + t.length)) + "</b>" + esc(g.slice(k + t.length));
+      return '<li data-g="' + esc(g) + '">' + html + "</li>";
+    }).join("");
+  }
+
+  function setActive(i) {
+    var items = suggest.querySelectorAll("li");
+    if (!items.length) return;
+    activeIdx = (i + items.length) % items.length;
+    items.forEach(function (li, j) { li.classList.toggle("active", j === activeIdx); });
+  }
+
+  q.addEventListener("input", renderSuggest);
+  q.addEventListener("keydown", function (e) {
+    if (e.key === "ArrowDown") { setActive(activeIdx + 1); e.preventDefault(); }
+    else if (e.key === "ArrowUp") { setActive(activeIdx - 1); e.preventDefault(); }
+    else if (e.key === "Escape") { suggest.innerHTML = ""; }
+    else if (e.key === "Enter") {
+      e.preventDefault();
+      var items = suggest.querySelectorAll("li");
+      var pick = activeIdx >= 0 && items[activeIdx] ? items[activeIdx].dataset.g : q.value;
+      showGene(pick);
+    }
+  });
+  suggest.addEventListener("click", function (e) {
+    var li = e.target.closest("li");
+    if (li) showGene(li.dataset.g);
+  });
+  document.addEventListener("click", function (e) {
+    if (!e.target.closest(".search")) suggest.innerHTML = "";
+  });
+
+  // ---- charts ----
+  function rowsHtml(items, maxMean) {
+    return items.map(function (it) {
+      var wMean = maxMean > 0 ? (100 * it.mean / maxMean) : 0;
+      return '<div class="row">' +
+        '<div class="lbl"><span>' + esc(it.name) + '</span><span class="n">' + fmtN(it.n) + " cél.</span></div>" +
+        '<div class="bar pct"><div class="track"><i style="width:' + it.pct + '%"></i></div>' +
+          '<span class="val">' + it.pct.toFixed(1) + "%</span></div>" +
+        '<div class="bar mean"><div class="track"><i style="width:' + wMean + '%"></i></div>' +
+          '<span class="val">' + it.mean.toFixed(2) + "</span></div>" +
+        "</div>";
+    }).join("");
+  }
+
+  function maxOf(items) {
+    return items.reduce(function (m, it) { return Math.max(m, it.mean); }, 0);
+  }
+
+  function renderClasses(card, items, sortBy, showAll) {
+    var sorted = items.slice().sort(function (a, b) {
+      return sortBy === "mean" ? (b.mean - a.mean || b.pct - a.pct) : (b.pct - a.pct || b.mean - a.mean);
+    });
+    var shown = showAll ? sorted : sorted.slice(0, TOP_N);
+    card.querySelector(".rows").innerHTML = rowsHtml(shown, maxOf(items));
+    card.querySelectorAll(".toggle button").forEach(function (b) {
+      b.classList.toggle("on", b.dataset.sort === sortBy);
+    });
+    var more = card.querySelector(".more");
+    more.style.display = items.length > TOP_N ? "block" : "none";
+    more.textContent = showAll ? "Ver menos" : "Ver los " + items.length + " tipos celulares";
+  }
+
+  function render(gene, d) {
+    var classes = META.classes.map(function (c, i) {
+      return { name: NAMES[c] || c, n: META.class_n[i], pct: d.cp[i], mean: d.cm[i] };
+    });
+    var stages = META.stages.map(function (s, i) {
+      return { name: s, n: META.stage_n[i], pct: d.sp[i], mean: d.sm[i] };
+    });
+
+    result.innerHTML =
+      '<div class="gene-title">' + esc(gene) + "</div>" +
+      '<div class="legend"><span style="--c:var(--pct)">% de células que lo expresan</span>' +
+        '<span style="--c:var(--mean)">Expresión media</span></div>' +
+      '<section class="card" id="card-classes">' +
+        '<div class="card-head"><h2>Tipos celulares</h2>' +
+          '<div class="toggle"><button data-sort="pct">% células</button><button data-sort="mean">Media</button></div>' +
+        "</div>" +
+        '<div class="rows"></div><button class="more"></button>' +
+      "</section>" +
+      '<section class="card"><div class="card-head"><h2>Estadíos</h2></div>' +
+        '<div class="rows">' + rowsHtml(stages, maxOf(stages)) + "</div>" +
+      "</section>";
+
+    var card = document.getElementById("card-classes");
+    var state = { sortBy: "pct", showAll: false };
+    renderClasses(card, classes, state.sortBy, state.showAll);
+    card.querySelector(".toggle").addEventListener("click", function (e) {
+      var b = e.target.closest("button");
+      if (!b) return;
+      state.sortBy = b.dataset.sort;
+      renderClasses(card, classes, state.sortBy, state.showAll);
+    });
+    card.querySelector(".more").addEventListener("click", function () {
+      state.showAll = !state.showAll;
+      renderClasses(card, classes, state.sortBy, state.showAll);
+    });
+  }
+
+  function showGene(input) {
+    suggest.innerHTML = "";
+    var gene = BY_LC[String(input || "").trim().toLowerCase()];
+    if (!gene) {
+      var alt = findMatches(input || "", 1)[0];
+      result.innerHTML = "";
+      status.textContent = input
+        ? 'No se encontró "' + input.trim() + '" en el atlas.' + (alt ? " ¿Quisiste decir " + alt + "?" : "")
+        : "";
+      return;
+    }
+    q.value = gene;
+    q.blur();
+    status.textContent = "Cargando " + gene + "…";
+    history.replaceState(null, "", "?gene=" + encodeURIComponent(gene));
+    loadShard(shardKey(gene)).then(function (shard) {
+      if (q.value !== gene) return;   // a newer search started meanwhile
+      status.textContent = "";
+      render(gene, shard[gene]);
+    }).catch(function () {
+      status.textContent = "No se pudieron cargar los datos. Revisá la conexión e intentá de nuevo.";
+    });
+  }
+
+  // ---- init ----
+  fetch("data/meta.json").then(function (r) {
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    return r.json();
+  }).then(function (meta) {
+    META = meta;
+    GENES_LC = meta.genes.map(function (g) { return g.toLowerCase(); });
+    meta.genes.forEach(function (g, i) { BY_LC[GENES_LC[i]] = g; });
+    document.getElementById("thr").textContent = meta.threshold;
+    q.disabled = false;
+    status.textContent = fmtN(meta.genes.length) + " genes · " +
+      fmtN(meta.stage_n.reduce(function (a, b) { return a + b; }, 0)) + " células";
+    var initial = new URLSearchParams(location.search).get("gene");
+    if (initial) showGene(initial);
+  }).catch(function () {
+    status.textContent = "No se pudo cargar la lista de genes.";
+  });
+})();
+</script>
+</body>
+</html>
